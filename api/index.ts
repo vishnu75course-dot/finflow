@@ -1,10 +1,10 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import OpenAI from "openai";
 import authRoutes from "../routes/auth.js";
 import dataRoutes from "../routes/data.js";
 import supabase from "../config/supabaseClient.js";
+import OpenAI from "openai";
 
 dotenv.config();
 
@@ -12,48 +12,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Mount Express API routers
+// Static API route mappings
 app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes);
 app.use('/api/data', dataRoutes);
+app.use('/data', dataRoutes);
 
-let openai: OpenAI | null = null;
-function getOpenAIClient() {
-  if (!openai) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not configured.");
-    }
-    openai = new OpenAI({ apiKey });
-  }
-  return openai;
-}
-
-async function callAI(messages: any[], systemPrompt: string) {
-  try {
-    const client = getOpenAIClient();
-    const inputMessages = [
-      { role: "system", content: systemPrompt },
-      ...messages
-    ];
-    const response = await client.responses.create({
-      model: "gpt-5.4-mini",
-      input: inputMessages,
-      store: true
-    });
-    return response.output_text || "";
-  } catch (error: any) {
-    console.error('OpenAI error:', error?.status || error?.response?.status, error?.message);
-    throw error;
-  }
-}
-
-// --- AI CHAT ENDPOINT (fetches user data from Supabase) ---
+// AI chat endpoint
 app.post("/api/ai/chat", async (req, res) => {
   try {
     const { message, history } = req.body;
     const authHeader = req.headers.authorization;
-    
-    console.log('Chat request:', { message, hasAuth: !!authHeader });
     
     if (!authHeader?.startsWith('Bearer ')) {
       return res.status(401).json({ error: "Authorization required" });
@@ -62,31 +31,20 @@ app.post("/api/ai/chat", async (req, res) => {
     const token = authHeader.replace('Bearer ', '');
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
-    console.log('Auth result:', { user: user?.id, authError: authError?.message });
-    
     if (authError || !user) {
       return res.status(401).json({ error: "Invalid token" });
     }
 
-    // Fetch user's financial data from Supabase
     const [txRes, bgRes, goalsRes] = await Promise.all([
       supabase.from('transactions').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50),
       supabase.from('budgets').select('*').eq('user_id', user.id),
       supabase.from('goals').select('*').eq('user_id', user.id)
     ]);
 
-    console.log('DB results:', { 
-      txError: txRes.error?.message, 
-      txCount: txRes.data?.length,
-      bgError: bgRes.error?.message,
-      goalsError: goalsRes.error?.message 
-    });
-
     const transactions = txRes.data || [];
     const budgets = bgRes.data || [];
     const goals = goalsRes.data || [];
 
-    // Build financial summary for GPT
     const expensesByCategory = transactions
       .filter(t => t.type === 'expense')
       .reduce((acc: Record<string, number>, t: any) => {
@@ -120,15 +78,24 @@ Recent Transactions: ${JSON.stringify(transactions.slice(0, 10))}
       { role: "user", content: message }
     ];
 
-    const reply = await callAI(messages, systemPrompt);
-    res.json({ reply: reply || "I couldn't generate a response." });
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.responses.create({
+      model: "gpt-5.4-mini",
+      input: [
+        { role: "system", content: systemPrompt },
+        ...messages
+      ],
+      store: true
+    });
+
+    res.json({ reply: response.output_text || "" });
   } catch (error: any) {
     console.error('Chat error:', error);
-    res.status(500).json({ error: "Chat service error", details: error.message });
+    res.status(500).json({ error: "Chat service error", details: error.message, stack: error.stack });
   }
 });
 
-// --- AI INSIGHTS ENDPOINT ---
+// AI insights endpoint
 app.post("/api/ai/insights", async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -144,7 +111,6 @@ app.post("/api/ai/insights", async (req, res) => {
       return res.status(401).json({ error: "Invalid token" });
     }
 
-    // Fetch user's financial data
     const [txRes, bgRes] = await Promise.all([
       supabase.from('transactions').select('*').eq('user_id', user.id).order('created_at', { ascending: false }).limit(50),
       supabase.from('budgets').select('*').eq('user_id', user.id)
@@ -161,7 +127,17 @@ app.post("/api/ai/insights", async (req, res) => {
       { role: "user", content: `Transactions: ${JSON.stringify(transactions.slice(0, 20))}\nBudgets: ${JSON.stringify(budgets)}` }
     ];
 
-    const reply = await callAI(messages, systemPrompt);
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.responses.create({
+      model: "gpt-5.4-mini",
+      input: [
+        { role: "system", content: systemPrompt },
+        ...messages
+      ] as any[],
+      store: true
+    });
+
+    const reply = response.output_text || "";
     
     let insights: any[] = [];
     try {
@@ -183,9 +159,9 @@ app.post("/api/ai/insights", async (req, res) => {
       }
     }
     res.json(insights);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Insights error:', error);
-    res.status(500).json({ error: "Insights service error" });
+    res.status(500).json({ error: "Insights service error", details: error.message, stack: error.stack });
   }
 });
 

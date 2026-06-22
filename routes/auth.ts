@@ -47,9 +47,9 @@ router.post("/register", async (req: Request, res: Response) => {
       message: 'Account created successfully',
       data: { user: authUser }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Registration error:', error);
-    res.status(500).json({ status: 'error', message: 'Registration failed' });
+    res.status(500).json({ status: 'error', message: error.message || 'Registration failed' });
   }
 });
 
@@ -81,9 +81,9 @@ router.post("/login", async (req: Request, res: Response) => {
         refresh_token: data.session?.refresh_token
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error);
-    res.status(500).json({ status: 'error', message: 'Login failed' });
+    res.status(500).json({ status: 'error', message: error.message || 'Login failed' });
   }
 });
 
@@ -95,9 +95,9 @@ router.post("/logout", async (req: Request, res: Response) => {
       await supabase.auth.admin.signOut(token);
     }
     res.json({ status: 'success', message: 'Logged out successfully' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Logout error:', error);
-    res.status(500).json({ status: 'error', message: 'Logout failed' });
+    res.status(500).json({ status: 'error', message: error.message || 'Logout failed' });
   }
 });
 
@@ -121,9 +121,9 @@ router.post("/refresh", async (req: Request, res: Response) => {
         refresh_token: data.session?.refresh_token
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Token refresh error:', error);
-    res.status(500).json({ status: 'error', message: 'Token refresh failed' });
+    res.status(500).json({ status: 'error', message: error.message || 'Token refresh failed' });
   }
 });
 
@@ -143,9 +143,9 @@ router.post("/forgot-password", async (req: Request, res: Response) => {
     }
 
     res.json({ status: 'success', message: 'Password reset email sent' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Forgot password error:', error);
-    res.status(500).json({ status: 'error', message: 'Failed to send reset email' });
+    res.status(500).json({ status: 'error', message: error.message || 'Failed to send reset email' });
   }
 });
 
@@ -172,9 +172,9 @@ router.post("/reset-password", async (req: Request, res: Response) => {
     }
 
     res.json({ status: 'success', message: 'Password updated successfully' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Reset password error:', error);
-    res.status(500).json({ status: 'error', message: 'Password reset failed' });
+    res.status(500).json({ status: 'error', message: error.message || 'Password reset failed' });
   }
 });
 
@@ -193,9 +193,9 @@ router.get("/me", async (req: Request, res: Response) => {
     }
 
     res.json({ status: 'success', data: { user } });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get user error:', error);
-    res.status(500).json({ status: 'error', message: 'Failed to get user' });
+    res.status(500).json({ status: 'error', message: error.message || 'Failed to get user' });
   }
 });
 
