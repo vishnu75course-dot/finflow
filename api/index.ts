@@ -16,19 +16,26 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/data', dataRoutes);
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let openai: OpenAI | null = null;
+function getOpenAIClient() {
+  if (!openai) {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      throw new Error("OPENAI_API_KEY is not configured.");
+    }
+    openai = new OpenAI({ apiKey });
+  }
+  return openai;
+}
 
 async function callAI(messages: any[], systemPrompt: string) {
-  if (!process.env.OPENAI_API_KEY) {
-    throw new Error("OPENAI_API_KEY is not configured. Please add it to your .env file.");
-  }
-
   try {
+    const client = getOpenAIClient();
     const inputMessages = [
       { role: "system", content: systemPrompt },
       ...messages
     ];
-    const response = await openai.responses.create({
+    const response = await client.responses.create({
       model: "gpt-5.4-mini",
       input: inputMessages,
       store: true
